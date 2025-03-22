@@ -1,0 +1,90 @@
+function onEdit(e) {
+  var sheet = e.source.getActiveSheet();
+  var editedCell = e.range;
+  var sheetName = "MainSheet"; // The name of your main sheet
+  var databaseSheetName = "ReferenceSheet"; // The name of your reference sheet
+
+  // Make sure the edit is happening in the correct sheet and column
+  if (sheet.getName() !== sheetName || editedCell.getColumn() !== 2) return; // Only run if edit is in Column B of MainSheet
+
+  var idColumnMain = 2; // Column B (ID input) in MainSheet
+  var nameOutputColumn = 4; // Column D (Autofill Name) in MainSheet
+  var idColumnRef = 2; // Column B (ID storage) in ReferenceSheet
+  var nameColumnRef = 1; // Column A (Name storage) in ReferenceSheet
+
+  var idData = sheet.getRange(2, idColumnMain, sheet.getLastRow() - 1, 1).getValues();
+  var refSheet = e.source.getSheetByName(databaseSheetName);
+  var refIDList = refSheet.getRange(2, idColumnRef, refSheet.getLastRow() - 1, 1).getValues();
+  var refNameList = refSheet.getRange(2, nameColumnRef, refSheet.getLastRow() - 1, 1).getValues();
+
+  var idMap = {};
+  for (var i = 0; i < refIDList.length; i++) {
+    idMap[refIDList[i][0].toString()] = refNameList[i][0];
+  }
+
+  var enteredID = editedCell.getValue().toString().trim();  // Ensure the ID is treated as a string
+  Logger.log("Entered ID: " + enteredID);
+
+  if (idMap[enteredID]) {
+    // Exact match found, autofill name in Column D
+    Logger.log("Exact match found for ID: " + enteredID);
+    sheet.getRange(editedCell.getRow(), nameOutputColumn).setValue(idMap[enteredID]);
+  } else {
+    // If no exact match, try to find a close match
+    Logger.log("No exact match found, trying to find the closest match.");
+    var correctedID = findClosestMatch(enteredID, Object.keys(idMap));
+    if (correctedID) {
+      Logger.log("Closest match found: " + correctedID);
+      sheet.getRange(editedCell.getRow(), idColumnMain).setValue(correctedID);
+      sheet.getRange(editedCell.getRow(), nameOutputColumn).setValue(idMap[correctedID]);
+    } else {
+      Logger.log("No close match found. Marking as Not Found.");
+      sheet.getRange(editedCell.getRow(), nameOutputColumn).setValue("Not Found");
+    }
+  }
+}
+
+// Function to find the closest match using Levenshtein Distance (edit distance)
+function findClosestMatch(inputID, idList) {
+  Logger.log("Finding closest match for ID: " + inputID);
+  var minDistance = 2; // Allow up to 2-character errors
+  var bestMatch = null;
+
+  for (var i = 0; i < idList.length; i++) {
+    var id = idList[i];
+    if (Math.abs(id.length - inputID.length) > 1) continue; // Skip IDs that differ by more than 1 character in length
+
+    var distance = levenshteinDistance(inputID, id);
+    Logger.log("Checking ID: " + id + " with Levenshtein distance: " + distance);
+
+    if (distance < minDistance) {
+      minDistance = distance;
+      bestMatch = id;
+      Logger.log("New best match: " + bestMatch + " with distance: " + minDistance);
+    }
+  }
+  return bestMatch;
+}
+
+// Function to calculate Levenshtein Distance (edit distance)
+function levenshteinDistance(str1, str2) {
+  var len1 = str1.length;
+  var len2 = str2.length;
+  var matrix = [];
+
+  for (var i = 0; i <= len1; i++) {
+    matrix[i] = [i];
+  }
+  for (var j = 0; j <= len2; j++) {
+    matrix[0][j] = j;
+  }
+
+  for (var i = 1; i <= len1; i++) {
+    for (var j = 1; j <= len2; j++) {
+      var cost = (str1[i - 1] === str2[j - 1]) ? 0 : 1;
+      matrix[i][j] = Math.min(matrix[i - 1][j] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j - 1] + cost);
+    }
+  }
+
+  return matrix[len1][len2];
+}
