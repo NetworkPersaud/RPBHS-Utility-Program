@@ -1,0 +1,22 @@
+function onEdit(e) {
+  var sheet = e.source.getActiveSheet();
+  var editedCell = e.range;
+
+  // Define the columns
+  var idColumn = 2;       // ID is in Column B (2nd column)
+  var dateTimeColumn = 6; // Date and Time should be inserted into Column F (6th column)
+
+  // Check if the edited cell is in the ID column and is not in the header row
+  if (editedCell.getColumn() === idColumn && editedCell.getRow() > 1) {
+    var dateTimeCell = sheet.getRange(editedCell.getRow(), dateTimeColumn);
+    var currentDate = new Date();
+
+    // Format the date and time as MM/dd/yyyy hh:mm AM/PM
+    var formattedDateTime = Utilities.formatDate(currentDate, 'America/New_York', 'MM/dd/yyyy hh:mm a');
+
+    // Update the dateTime cell only if it's blank
+    if (dateTimeCell.isBlank()) {
+      dateTimeCell.setValue(formattedDateTime);
+    }
+  }
+}
