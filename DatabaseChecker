@@ -1,0 +1,94 @@
+function checkAndRemoveNewDuplicates() {
+  // Open the source sheet using the provided spreadsheet ID and the correct sheet name "Contacts"
+  const sourceSpreadsheet = SpreadsheetApp.openById("1m_47fY1FVZpFRIcDbvQhrkrRBoXlBZVD0wqwq85dKwo");
+  const sourceSheet = sourceSpreadsheet.getSheetByName("Contacts"); // Corrected sheet name to "Contacts"
+  const emailColumn = sourceSheet.getRange("B2:B").getValues(); // Assumes email addresses start from B2
+  
+  // Open the destination sheet for duplicates
+  const destSpreadsheet = SpreadsheetApp.openById("17snmzSwvQ1BE37EnWQsHG8dciOe8hrqUJkgJaagAQPE");
+  const destSheet = destSpreadsheet.getSheetByName("Duplicates"); // Using the "Duplicates" sheet
+  
+  // Get existing duplicates from the destination sheet
+  const existingDuplicates = destSheet.getRange("A2:A").getValues().flat();
+  const existingDuplicateEmails = new Set(existingDuplicates);
+  
+  const emailMap = new Map();
+  
+  // Loop through the email column and store row numbers for each email
+  for (let i = 0; i < emailColumn.length; i++) {
+    const email = emailColumn[i][0];
+    if (email && !existingDuplicateEmails.has(email)) { // Ensure email is not empty and not already reported
+      if (emailMap.has(email)) {
+        emailMap.get(email).push(i + 2); // Store row number (adjusted for starting from row 2)
+      } else {
+        emailMap.set(email, [i + 2]);
+      }
+    }
+  }
+  
+  // Check for any previous duplicates already in the "Duplicates" sheet
+  const existingDuplicateEntries = destSheet.getRange("A2:A").getValues().flat();
+  let rowIndex = destSheet.getLastRow() + 1;
+
+  // Scan for duplicates in the "Duplicates" sheet
+  if (existingDuplicateEntries.length > 0) {
+    existingDuplicateEntries.forEach(email => {
+      if (email) {
+        emailMap.delete(email);  // Remove duplicates from the emailMap
+      }
+    });
+  }
+
+  // Write the new duplicate results to the destination sheet
+  emailMap.forEach((rows, email) => {
+    if (rows.length > 1) {
+      destSheet.getRange(rowIndex, 1).setValue(email);
+      destSheet.getRange(rowIndex, 2).setValue(rows.join(", ")); // Join all rows with this duplicate email
+      Logger.log(`New duplicate email found: ${email}, Rows: ${rows.join(", ")}`);
+      rowIndex++;
+    }
+  });
+  
+  // Now remove duplicates in the main sheet
+  const allEmails = sourceSheet.getRange("B2:B").getValues();
+  const uniqueEmails = new Set();
+  const rowsToDelete = [];
+  const emailsToRemoveFromExport = [];
+  
+  // Loop through all email rows in the main sheet and identify duplicates
+  for (let i = allEmails.length - 1; i >= 0; i--) {
+    const email = allEmails[i][0];
+    if (email && uniqueEmails.has(email)) {
+      rowsToDelete.push(i + 2); // Mark row for deletion (adjusted for starting from row 2)
+      emailsToRemoveFromExport.push(email);
+      Logger.log(`Duplicate email found: ${email}, Row: ${i + 2}`);
+    } else {
+      uniqueEmails.add(email);
+    }
+  }
+  
+  // Loop through rows to be deleted and verify the email before deletion
+  rowsToDelete.forEach(row => {
+    const emailToDelete = sourceSheet.getRange(row, 2).getValue(); // Get email at that row
+    Logger.log(`Checking if email matches before deletion at Row: ${row}, Email: ${emailToDelete}`);
+    
+    // If email matches, proceed with deletion
+    if (uniqueEmails.has(emailToDelete)) {
+      sourceSheet.deleteRow(row); // Delete the row
+      Logger.log(`Deleted duplicate email at Row: ${row}, Email: ${emailToDelete}`);
+      
+      // After deletion, update the "Duplicates" sheet by removing the email entry
+      const indexInDuplicates = existingDuplicates.indexOf(emailToDelete);
+      if (indexInDuplicates > -1) {
+        destSheet.deleteRow(indexInDuplicates + 2); // Adjust index for starting from row 2
+        Logger.log(`Removed email from Duplicates sheet: ${emailToDelete}`);
+        existingDuplicates.splice(indexInDuplicates, 1); // Remove email from existing list to avoid future deletion attempts
+      }
+    } else {
+      Logger.log(`Email mismatch at Row: ${row}, not deleting.`);
+    }
+  });
+  
+  // Log completion message instead of alert
+  Logger.log("Duplicate check and removal process completed.");
+}
