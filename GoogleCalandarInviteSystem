@@ -1,0 +1,38 @@
+function sendHomecomingInvites() {
+  var sheet = SpreadsheetApp.openByUrl("https://docs.google.com/spreadsheets/d/1Dig9LXk6luJ5CEl0Q1u5_nYi6sK4faBJMNb4d7UkFJE/edit?gid=0#gid=0").getActiveSheet();
+  
+  var calendarId = 's27950591@stu.palmbeachschools.org'; // Calendar ID from your link
+  var eventTitle = 'RPBHS Homecoming25'; // Name of the event to search for
+  
+  var calendar = CalendarApp.getCalendarById(calendarId);
+  
+  if (!calendar) {
+    Logger.log("Calendar not found!");
+    return;
+  }
+  
+  // Search for the event by title
+  var events = calendar.getEvents(new Date('2025-06-01'), new Date('2025-12-31'), {search: eventTitle});
+  
+  if (events.length === 0) {
+    Logger.log("Event not found!");
+    return;
+  }
+  
+  var event = events[0]; // Assuming the first matching event is the one you want
+  var existingGuests = event.getGuestList().map(function(guest) {
+    return guest.getEmail();
+  });
+
+  var data = sheet.getDataRange().getValues();
+  
+  for (var i = 1; i < data.length; i++) {
+    var email = data[i][9]; // Column J
+    if (email && existingGuests.indexOf(email) === -1) { // Check if email is not empty and not already invited
+      event.addGuest(email);
+      Logger.log("Invited: " + email);
+    } else {
+      Logger.log("Already invited or no email: " + email);
+    }
+  }
+}
