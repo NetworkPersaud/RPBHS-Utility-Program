@@ -1,0 +1,96 @@
+function getMostRecentStudent() {
+  var domain = 'stu.palmbeachschools.org';
+  var pageSize = 500; // Adjust to process fewer users at a time
+  var maxUsersToCheck = 5000; // Limit to avoid scanning too many users
+  var highestID = getLastProcessed(); // Fetch the last processed student ID
+  var recentUser = null;
+  var nextPageToken = '';
+  var processedUsers = 0;
+
+  Logger.log('Fetching most recent student...');
+
+  do {
+    try {
+      var response = AdminDirectory.Users.list({
+        domain: domain,
+        viewType: 'domain_public',
+        maxResults: pageSize,
+        pageToken: nextPageToken
+      });
+
+      if (response.users && response.users.length > 0) {
+        var users = response.users;
+        nextPageToken = response.nextPageToken;
+
+        for (var i = 0; i < users.length; i++) {
+          var email = users[i].primaryEmail;
+          var match = email.match(/^s(\d+)@stu\.palmbeachschools\.org$/); // Extract student ID
+
+          if (match) {
+            var studentID = parseInt(match[1]); // Convert to number
+
+            if (studentID > highestID) {
+              highestID = studentID;
+              recentUser = users[i];
+              addStudentToSheet(users[i]); // Add new student to sheet if not already present
+            }
+          }
+
+          processedUsers++;
+          if (processedUsers >= maxUsersToCheck) {
+            Logger.log('Reached user check limit, stopping early.');
+            nextPageToken = null;
+            break;
+          }
+        }
+      } else {
+        Logger.log('No users found in this batch.');
+        nextPageToken = null;
+      }
+
+      Utilities.sleep(1000); // Avoid API rate limits
+
+    } catch (e) {
+      Logger.log('Error fetching users: ' + e.message);
+      Utilities.sleep(5000); // Wait and retry after an error
+      continue;
+    }
+  } while (nextPageToken);
+
+  if (recentUser) {
+    Logger.log('Most recently added student: ' + recentUser.name.fullName + ' (' + recentUser.primaryEmail + ')');
+    saveLastProcessed(highestID); // Save the highest ID processed
+  } else {
+    Logger.log('No valid student users found.');
+  }
+}
+
+function getLastProcessed() {
+  const progressSheet = SpreadsheetApp.openById('1JSnE5yQUrAxylgzebzn_KRRt6ZuzAtxGWv7xlQ0jP4M').getSheetByName('Progress');
+  var lastProcessed = progressSheet.getRange(1, 1).getValue();
+  return lastProcessed || 12706651;  // Default to first student number if no data
+}
+
+function saveLastProcessed(lastProcessed) {
+  const progressSheet = SpreadsheetApp.openById('1JSnE5yQUrAxylgzebzn_KRRt6ZuzAtxGWv7xlQ0jP4M').getSheetByName('Progress');
+  progressSheet.getRange(1, 1).setValue(lastProcessed);  // Store the last processed student ID
+}
+
+function addStudentToSheet(student) {
+  const sheet = SpreadsheetApp.openById('1m_47fY1FVZpFRIcDbvQhrkrRBoXlBZVD0wqwq85dKwo').getSheetByName('Contacts');
+  var name = student.name.fullName;
+  var email = student.primaryEmail;
+
+  // Check if the student is already in the sheet before adding
+  var data = sheet.getRange(1, 2, sheet.getLastRow(), 1).getValues(); // Get email column
+  for (var i = 0; i < data.length; i++) {
+    if (data[i][0] === email) {
+      Logger.log('Student already exists: ' + name + ' (' + email + ')');
+      return;
+    }
+  }
+
+  // If not found, add the student
+  sheet.appendRow([name, email, 'Processed']);
+  Logger.log('Added student: ' + name + ' (' + email + ')');
+}
