@@ -1,0 +1,74 @@
+function sendFiles() {
+  Logger.log("Starting to send files...");
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var lastRow = sheet.getLastRow();
+  
+  var emailSentRange = sheet.getRange(2, 12, lastRow - 1); // Assuming column L (12) is for tracking sent emails
+  var emailSentValues = emailSentRange.getValues();
+  
+  var folder = DriveApp.getFolderById('1pZN6ohjZJH_AtLB7E83HXGXy7dCKXfOQ'); // Folder ID where files will be saved
+  Logger.log("Folder fetched successfully with ID: 1pZN6ohjZJH_AtLB7E83HXGXy7dCKXfOQ");
+
+  for (var i = 2; i <= lastRow; i++) { // Start from row 2 (assuming row 1 is the header)
+    Logger.log("Processing row " + i);
+    
+    if (emailSentValues[i - 2][0] === 'Yes') {
+      Logger.log('Files already sent to row ' + i + '. Skipping.');
+      continue; // Skip if files already sent
+    }
+
+    var studentID = sheet.getRange(i, 2).getValue(); // Column B
+    var name = sheet.getRange(i, 4).getValue(); // Column D
+    var emailAddress = sheet.getRange(i, 10).getValue(); // Column J
+    var purchaseDate = sheet.getRange(i, 3).getValue(); // Column C
+
+    // Skip row if any of the required fields are empty
+    if (!studentID || !name || !emailAddress || !purchaseDate) {
+      Logger.log("Skipping row " + i + " due to missing required fields.");
+      continue;
+    }
+
+    Logger.log('Data fetched for row ' + i + ': Name: ' + name + ', Email: ' + emailAddress);
+
+    try {
+      // Create a copy of the document
+      var fileName = name + ' - ' + 'Confirmation'; // Create a file name
+      var newDoc = DriveApp.getFileById('1OQAXkVuqvU5vgcjLvP-pLExBW9OqVov4wTBMCApyfD4') // Template document ID
+        .makeCopy(fileName, folder); // Make a copy in the folder
+
+      var newDocId = newDoc.getId();
+      var newDocFile = DocumentApp.openById(newDocId);
+      var body = newDocFile.getBody();
+      
+      // Ensure placeholders are replaced properly
+      Logger.log("Replacing placeholders for row " + i);
+
+      body.replaceText('{{name}}', name); 
+      body.replaceText('{{id}}', studentID);
+      body.replaceText('{{purchaseDate}}', purchaseDate);
+      
+      Logger.log("Placeholders replaced successfully in document.");
+
+      // Save and close the document after replacements
+      newDocFile.saveAndClose();
+      Logger.log("Document saved with updated content.");
+
+      // Convert the document to a PDF and save it in the folder
+      var pdfBlob = newDoc.getAs('application/pdf'); // Convert to PDF
+      var pdfFile = folder.createFile(pdfBlob).setName(fileName + '.pdf');
+      Logger.log("PDF created successfully: " + fileName);
+    
+      // Add viewers for the email address
+      newDoc.addViewer(emailAddress);
+      pdfFile.addViewer(emailAddress);
+      Logger.log("Viewer added: " + emailAddress);
+
+      // Mark as sent in the sheet
+      sheet.getRange(i, 12).setValue('Yes'); // Column L
+      Logger.log('Processed confirmation for row ' + i + ': ' + emailAddress);
+    } catch (error) {
+      Logger.log("Error at row " + i + ": " + error.message);
+    }
+  }
+  Logger.log("Finished processing all rows.");
+}
