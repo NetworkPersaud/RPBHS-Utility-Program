@@ -1,0 +1,80 @@
+function updateMasterSheet() {
+  try {
+    // Spreadsheet and sheet references
+    const spreadsheetId = "1toXbB-KgHOK5mGDZ2Zb8m16qdzRV7ppz-MxTo4YL0Xc";
+    const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+    const masterSheet = spreadsheet.getSheetByName("Master");
+
+    if (!masterSheet) {
+      throw new Error("The 'Master' sheet is missing.");
+    }
+
+    // Define sheet names to process
+    const activitySheets = [
+      "Spirit Day/Dress Up",
+      "Attending Games",
+      "Pep Rallies",
+      "Honor Roll",
+      "Student Council Events",
+      "Afterschool Events"
+    ];
+
+    // Define column indices
+    const studentIdColumn = 2; // Column B for student IDs
+    const pointsColumn = 7; // Column G for points
+    const masterIdColumn = 2; // Column B for IDs in Master sheet
+    const masterTotalColumn = 4; // Column D for total points in Master sheet
+
+    // Fetch master sheet data
+    const masterDataRange = masterSheet.getRange(2, masterIdColumn, masterSheet.getLastRow() - 1, 1);
+    const masterData = masterDataRange.getValues();
+    const masterTotals = {}; // Track current totals in Master
+
+    // Populate masterTotals with IDs from the Master sheet
+    masterData.forEach(row => {
+      const studentId = row[0];
+      if (studentId) {
+        masterTotals[studentId] = 0; // Initialize total points for each ID
+      }
+    });
+
+    // Process each activity sheet
+    activitySheets.forEach(sheetName => {
+      const activitySheet = spreadsheet.getSheetByName(sheetName);
+      if (!activitySheet) {
+        Logger.log(`Skipped missing sheet: ${sheetName}`);
+        return; // Skip if the sheet doesn't exist
+      }
+
+      const activityData = activitySheet.getDataRange().getValues();
+      Logger.log(`Processing sheet: ${sheetName}`);
+
+      for (let i = 1; i < activityData.length; i++) {
+        const studentId = activityData[i][studentIdColumn - 1];
+        const points = parseFloat(activityData[i][pointsColumn - 1]) || 0;
+
+        if (studentId && masterTotals.hasOwnProperty(studentId)) {
+          masterTotals[studentId] += points; // Add points to the respective ID
+        } else if (studentId) {
+          Logger.log(`Skipped unmatched ID: ${studentId} in sheet: ${sheetName}`);
+        }
+      }
+    });
+
+    // Prepare data for updating the Master sheet
+    const masterUpdates = masterData.map(row => {
+      const studentId = row[0];
+      return [masterTotals[studentId] || 0]; // Update points or set to 0 if missing
+    });
+
+    // Write updated totals to the Master sheet
+    if (masterUpdates.length > 0) {
+      masterSheet.getRange(2, masterTotalColumn, masterUpdates.length, 1).setValues(masterUpdates);
+      Logger.log("Master sheet updated successfully!");
+    } else {
+      Logger.log("No updates to write to the Master sheet.");
+    }
+  } catch (error) {
+    Logger.log(`Error: ${error.message}`);
+  }
+}
