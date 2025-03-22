@@ -1,0 +1,98 @@
+function generatePDF() {
+  var now = new Date();
+  var year = now.getFullYear();
+  var month = now.getMonth();
+  var day = now.getDate();
+  var hours = now.getHours();
+  var minutes = now.getMinutes();
+
+  // Set allowed date range
+  var startDate = new Date(2025, 7, 4);  // August 4, 2025
+  var endDate = new Date(2025, 9, 31);   // October 31, 2025
+
+  if (now < startDate || now > endDate) {
+    Logger.log("Outside the allowed date range. Script will not run.");
+    return;
+  }
+
+  // Time conditions: every hour except 11 AM - 1 PM (every 15 mins)
+  if ((hours >= 7 && hours < 11) || (hours >= 13 && hours < 19)) {
+    if (minutes !== 0) return; // Run once per hour outside 11AM-1PM
+  } else if (hours === 11 || hours === 12) {
+    // Runs every 15 minutes (trigger handles this)
+  } else {
+    Logger.log("Outside allowed hours. Script will not run.");
+    return;
+  }
+
+  // Define parent folder in Google Drive
+  var parentFolderId = "1D9HbydQUq4RkNJzWqJ99C5bbd5nd-PLo";
+  var parentFolder = DriveApp.getFolderById(parentFolderId);
+
+  // Create weekly folder
+  var startOfWeek = new Date(now);
+  startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay()); 
+  var endOfWeek = new Date(startOfWeek);
+  endOfWeek.setDate(startOfWeek.getDate() + 6);
+
+  var weeklyFolderName = formatDate(startOfWeek) + " to " + formatDate(endOfWeek);
+  var weeklyFolder = getOrCreateFolder(parentFolder, weeklyFolderName);
+
+  // Create daily folder
+  var dailyFolderName = formatDate(now);
+  var dailyFolder = getOrCreateFolder(weeklyFolder, dailyFolderName);
+
+  // Define PDF filename
+  var timestamp = formatDate(now) + "-" + formatTime(now);
+  var pdfName = "RPBHS-" + timestamp + ".pdf";
+
+  // Generate PDF from Google Sheet
+  var sheetId = "1WIPvt2mzK_B2tr7RowQrnOcW-c1VGBOPAw_ncDunc6E"; // Your Sheet ID
+  var pdfBlob = createSheetPDF(sheetId, pdfName);
+
+  // Save PDF to the daily folder
+  if (pdfBlob) {
+    dailyFolder.createFile(pdfBlob);
+    Logger.log("PDF created: " + pdfName);
+  } else {
+    Logger.log("Failed to create PDF.");
+  }
+}
+
+// Function to create a PDF from Google Sheet
+function createSheetPDF(sheetId, pdfName) {
+  var url = "https://docs.google.com/spreadsheets/d/" + sheetId + "/export?format=pdf&portrait=false&size=A4";
+  var params = {
+    muteHttpExceptions: true,
+    headers: { Authorization: "Bearer " + ScriptApp.getOAuthToken() },
+  };
+  var response = UrlFetchApp.fetch(url, params);
+  
+  if (response.getResponseCode() === 200) {
+    return response.getBlob().setName(pdfName);
+  } else {
+    Logger.log("Error fetching PDF: " + response.getContentText());
+    return null;
+  }
+}
+
+// Function to check if a folder exists or create a new one
+function getOrCreateFolder(parent, name) {
+  var folders = parent.getFoldersByName(name);
+  return folders.hasNext() ? folders.next() : parent.createFolder(name);
+}
+
+// Function to format date as YYYY-MM-DD
+function formatDate(date) {
+  return date.getFullYear() + "-" + pad(date.getMonth() + 1) + "-" + pad(date.getDate());
+}
+
+// Function to format time as HH-MM
+function formatTime(date) {
+  return pad(date.getHours()) + "-" + pad(date.getMinutes());
+}
+
+// Function to pad numbers with leading zeros
+function pad(num) {
+  return num < 10 ? "0" + num : num;
+}
